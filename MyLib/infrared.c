@@ -17,14 +17,14 @@ uint32_t rx_last_activity_time = 0;
 
 static IR_TX_Context_t tx_context = {0};
 
-static void IR_TX_SetNextTimer(uint16_t delay_us)
+static void IR_TX_SetNextTimer(uint16_t delay_us)//设置红外发送定时器
 {
     __HAL_TIM_SET_COUNTER(&htim3, 0);
     __HAL_TIM_SET_AUTORELOAD(&htim3, delay_us);
     __HAL_TIM_CLEAR_IT(&htim3, TIM_IT_UPDATE);
 }
  
-void IR_Init(void)
+void IR_Init(void)//初始化红外模块
 {
     HAL_TIM_IC_Start_IT(&htim2, IC_CHANNEL);
     HAL_GPIO_WritePin(IR_TX_GPIO_PORT, IR_TX_GPIO_PIN, GPIO_PIN_RESET);
@@ -33,7 +33,7 @@ void IR_Init(void)
     rx_last_activity_time = HAL_GetTick();
 }
 
-bool IR_SendData(uint8_t *data, uint8_t length)
+bool IR_SendData(uint8_t *data, uint8_t length)//发送红外数据帧
 {
     if (length > 8) return false;
     if (tx_context.busy) return false;
@@ -60,12 +60,12 @@ bool IR_SendData(uint8_t *data, uint8_t length)
     return true;
 }
 
-bool IR_IsTXBusy(void)
+bool IR_IsTXBusy(void)//判断红外发送是否繁忙
 {
     return tx_context.busy;
 }
 
-void IR_TX_TimerCallback(TIM_HandleTypeDef *htim)
+void IR_TX_TimerCallback(TIM_HandleTypeDef *htim)//红外发送定时器中断回调函数
 {
     if (htim->Instance != TIM3) return;
     __HAL_TIM_CLEAR_IT(htim, TIM_IT_UPDATE);
@@ -113,7 +113,7 @@ void IR_TX_TimerCallback(TIM_HandleTypeDef *htim)
             }
             break;
 
-        case IR_TX_STOP_PULSE:
+        case IR_TX_STOP_PULSE://停止发送脉冲
             HAL_TIM_PWM_Stop(&htim1, TIM_CHANNEL_1);
             HAL_GPIO_WritePin(IR_TX_GPIO_PORT, IR_TX_GPIO_PIN, GPIO_PIN_RESET);
             tx_context.state = IR_TX_IDLE;
@@ -122,7 +122,7 @@ void IR_TX_TimerCallback(TIM_HandleTypeDef *htim)
             HAL_TIM_Base_Stop_IT(&htim3);
             break;
 
-        default:
+        default://默认状态
             HAL_TIM_PWM_Stop(&htim1, TIM_CHANNEL_1);
             HAL_GPIO_WritePin(IR_TX_GPIO_PORT, IR_TX_GPIO_PIN, GPIO_PIN_RESET);
             tx_context.busy = false;
@@ -132,7 +132,7 @@ void IR_TX_TimerCallback(TIM_HandleTypeDef *htim)
     }
 }
 
-uint8_t IR_CRC8(uint8_t *data, uint8_t length)
+uint8_t IR_CRC8(uint8_t *data, uint8_t length)//计算CRC8校验和
 {
     uint8_t crc = 0xFF;
     for (uint8_t i = 0; i < length; i++) {
@@ -148,7 +148,7 @@ uint8_t IR_CRC8(uint8_t *data, uint8_t length)
     return crc;
 }
 
-void HAL_TIM_IC_CaptureCallback(TIM_HandleTypeDef *htim)
+void HAL_TIM_IC_CaptureCallback(TIM_HandleTypeDef *htim)//红外接收捕获中断回调函数
 {
     if (htim->Channel != HAL_TIM_ACTIVE_CHANNEL_1) return;
 

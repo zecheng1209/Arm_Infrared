@@ -89,7 +89,7 @@ typedef struct {
 } IR_Host_ResponseFrame_t;
 
 typedef struct {
-    uint8_t raw_data[6];
+    uint8_t raw_data[7];
     uint32_t update_timestamp;
     bool valid;
     uint8_t consistent_count;
@@ -166,5 +166,8 @@ uint8_t IR_Host_CRC8(uint8_t *data, uint8_t length);
 void IR_Host_ConfigCanFilter(void);
 void IR_Host_StartCan(void);
 void IR_Host_TxMailboxCompleteCallback(CAN_HandleTypeDef *hcan);
+
+void IR_Test_Task(void *argument);
+void IR_Test_StartTask(void);
 
 #endif

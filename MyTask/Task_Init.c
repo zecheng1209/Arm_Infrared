@@ -61,11 +61,11 @@ void Task_Init(void)
     vTaskDelay(2000);
     //MotorInit();
     
-	xTaskCreate(Motor_Drive, "Motor_Drive", 628, NULL, 4, &Motor_Drive_Handle);//驱动
-	xTaskCreate(IR_Host_Task, "IR_Host_Task", 512, NULL, 3, &IR_Host_Task_Handle);//红外上位机
+	//////xTaskCreate(Motor_Drive, "Motor_Drive", 628, NULL, 4, &Motor_Drive_Handle);//驱动
+	//////xTaskCreate(IR_Host_Task, "IR_Host_Task", 512, NULL, 3, &IR_Host_Task_Handle);//红外上位机
 	//	xTaskCreate(Motor_reset, "Motor_reset", 300, NULL, 4, &Motor_Reset_Handle);//复位
     //xTaskCreate(MotorSendTask, "MotorSendTask", 128, NULL, 4, &MotorSendTask_Handle);//将数据发送到PC
-
+  IR_Test_StartTask();
 }
 
 void RampToTarget(float *val, float target, float step)//斜坡

@@ -2,7 +2,7 @@
 #include "FreeRTOS.h"
 #include "task.h"
 #include "can.h"
-#include "Run.h"
+#include "infrared_host.h"
 #include "math.h"
 #include "stdbool.h"
 
@@ -26,10 +26,10 @@ bool Joint_FinInit()
 		F_buf[1] = Float_S(Joint[1].Rs_motor.state.rad, 0 + Joint[1].pos_offset);
 		F_buf[2] = Float_S(Joint[2].Rs_motor.state.rad, -1.57 + Joint[2].pos_offset);
 		F_buf[3] = Float_S(Joint[3].Rs_motor.state.rad, 0 + Joint[3].pos_offset);
-		
+
 		if(F_buf[0] && F_buf[1]&& F_buf[2]&& F_buf[3])
 			return true;
-		else 
+		else
 			return false;
 }
 
@@ -42,29 +42,24 @@ void Task_Init(void)
 {
     CanFilter_Init(&hcan1);
     CanFilter_Init(&hcan2);
-    HAL_CAN_Start(&hcan1); 
+    HAL_CAN_Start(&hcan1);
     HAL_CAN_Start(&hcan2);
-	  HAL_CAN_ActivateNotification(&hcan1,CAN_IT_RX_FIFO0_MSG_PENDING);//4.2黄绿绿绿板子的can1口是坏的。另附：使用can口记得在该总线上加一个终端电阻。
+	  HAL_CAN_ActivateNotification(&hcan1,CAN_IT_RX_FIFO0_MSG_PENDING);
     HAL_CAN_ActivateNotification(&hcan2,CAN_IT_RX_FIFO1_MSG_PENDING);
-//    HAL_CAN_ActivateNotification(&hcan1,CAN_IT_TX_MAILBOX_EMPTY);
-//    HAL_CAN_ActivateNotification(&hcan2,CAN_IT_TX_MAILBOX_EMPTY);
-    vTaskDelay(2000);
-	  RobStrideInit(&rs03, &hcan2, 0x02, RobStride_03);
-	  RobStrideInit(&rs02, &hcan2, 0x03, RobStride_02);
-	  RobStrideSetMode(&rs03, RobStride_Torque);
-	  RobStrideSetMode(&rs02, RobStride_Torque);
-		vTaskDelay(100);
-  	RobStrideEnable(&rs03);
-	  RobStrideEnable(&rs02);
 
-	  //vTaskDelay(100);
-    //vTaskDelay(2000);
-    //MotorInit();
-    
-	xTaskCreate(Motor_Drive, "Motor_Drive", 256, NULL, 4, &Motor_Drive_Handle);
-	xTaskCreate(Motor_RM, "Motor_RM", 256, NULL, 4, &Motor_RM_Handle);//驱动
-	//	xTaskCreate(Motor_reset, "Motor_reset", 300, NULL, 4, &Motor_Reset_Handle);//复位
-    //xTaskCreate(MotorSendTask, "MotorSendTask", 128, NULL, 4, &MotorSendTask_Handle);//将数据发送到PC
+//	  vTaskDelay(2000);
+//	  RobStrideInit(&rs03, &hcan2, 0x02, RobStride_03);
+//	  RobStrideInit(&rs02, &hcan2, 0x03, RobStride_02);
+//	  RobStrideSetMode(&rs03, RobStride_Torque);
+//	  RobStrideSetMode(&rs02, RobStride_Torque);
+//		vTaskDelay(100);
+//  	RobStrideEnable(&rs03);
+//	  RobStrideEnable(&rs02);
+
+//	xTaskCreate(Motor_Drive, "Motor_Drive", 256, NULL, 4, &Motor_Drive_Handle);
+//	xTaskCreate(Motor_RM, "Motor_RM", 256, NULL, 4, &Motor_RM_Handle);
+
+    IR_Test_StartTask();
 }
 
 void RampToTarget(float *val, float target, float step)//斜坡

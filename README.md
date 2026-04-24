@@ -8,6 +8,7 @@
 
 - STM32F407VETx开发板
 - RobStride系列电机（03型和01型）
+- RoboMaster3508及2006系列电机
 - CAN总线接口
 - 红外通信模块
 - 电源系统

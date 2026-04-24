@@ -5,9 +5,42 @@ extern CAN_HandleTypeDef hcan1;
 
 IR_Host_Context_t ir_host_context = {0};
 
+typedef struct {
+    uint8_t tx_data[7];
+    uint8_t rx_data[7];
+    uint8_t rx_data_len;
+    uint32_t update_timestamp;
+    uint32_t test_cycle;
+    uint8_t task_state;
+    uint8_t online_count;
+    uint8_t total_modules;
+
+    struct {
+        uint8_t discovered;
+        uint8_t online;
+        uint8_t busy;
+        uint8_t consecutive_errors;
+        uint32_t total_rx_count;
+        uint32_t last_rx_time;
+    } mod1, mod2;
+
+    struct {
+        uint32_t tx_success_count;
+        uint32_t tx_fail_count;
+        uint32_t rx_valid_count;
+        uint32_t rx_invalid_count;
+        uint8_t data_match;
+        uint8_t data_check_result;
+    } stats;
+
+    uint8_t data_changed_flag;
+} IR_Debug_Data_t;
+
+IR_Debug_Data_t ir_debug = {0};
+
 static TaskHandle_t ir_host_task_handle = NULL;
 
-void IR_Host_Init(void)
+void IR_Host_Init(void)//初始化红外主机
 {
     ir_host_context.rx_queue = xQueueCreate(IR_HOST_RX_QUEUE_SIZE, sizeof(IR_Host_RxFrame_t));
     ir_host_context.module_list.head = NULL;
@@ -27,7 +60,7 @@ void IR_Host_Init(void)
     }
 }
 
-void IR_Host_StartTask(void)
+void IR_Host_StartTask(void)//启动红外主机任务
 {
     if (ir_host_task_handle == NULL) {
         xTaskCreate(IR_Host_Task, "IRHostTask", 1024, NULL, 3, &ir_host_task_handle);
@@ -75,7 +108,7 @@ bool IR_Host_AddModule(uint8_t module_id)
     return true;
 }
 
-bool IR_Host_RemoveModule(uint8_t module_id)
+bool IR_Host_RemoveModule(uint8_t module_id)//移除红外主机模块
 {
     if (!ir_host_context.initialized) return false;
 
@@ -98,7 +131,7 @@ bool IR_Host_RemoveModule(uint8_t module_id)
     return false;
 }
 
-IR_Module_Node_t* IR_Host_FindModule(uint8_t module_id)
+IR_Module_Node_t* IR_Host_FindModule(uint8_t module_id)//查找红外主机模块
 {
     if (!ir_host_context.initialized) return NULL;
 
@@ -112,7 +145,7 @@ IR_Module_Node_t* IR_Host_FindModule(uint8_t module_id)
     return NULL;
 }
 
-IR_Module_Node_t* IR_Host_GetModuleByIndex(uint8_t index)
+IR_Module_Node_t* IR_Host_GetModuleByIndex(uint8_t index)//根据索引获取红外主机模块
 {
     if (!ir_host_context.initialized || index >= ir_host_context.module_list.count) return NULL;
 
@@ -123,19 +156,19 @@ IR_Module_Node_t* IR_Host_GetModuleByIndex(uint8_t index)
     return current;
 }
 
-uint8_t IR_Host_GetModuleCount(void)
+uint8_t IR_Host_GetModuleCount(void)//获取红外主机模块数量
 {
     return ir_host_context.module_list.count;
 }
 
-bool IR_Host_IsModuleOnline(uint8_t module_id)
+bool IR_Host_IsModuleOnline(uint8_t module_id)//判断红外主机模块是否在线
 {
     IR_Module_Node_t *module = IR_Host_FindModule(module_id);
     if (module == NULL) return false;
     return module->online;
 }
 
-uint8_t IR_Host_GetOnlineCount(void)
+uint8_t IR_Host_GetOnlineCount(void)//获取红外主机在线模块数量
 {
     uint8_t count = 0;
     IR_Module_Node_t *current = ir_host_context.module_list.head;
@@ -153,7 +186,7 @@ IR_Host_TaskState_t IR_Host_GetTaskState(void)
     return ir_host_context.task_state;
 }
 
-void IR_Host_ForceRediscover(void)
+void IR_Host_ForceRediscover(void)//强制重新发现红外主机模块
 {
     IR_Module_Node_t *current = ir_host_context.module_list.head;
     while (current != NULL) {
@@ -168,7 +201,7 @@ void IR_Host_ForceRediscover(void)
     ir_host_context.discovery_start_time = HAL_GetTick();
 }
 
-uint8_t IR_Host_CRC8(uint8_t *data, uint8_t length)
+uint8_t IR_Host_CRC8(uint8_t *data, uint8_t length)//计算红外主机CRC8校验和
 {
     uint8_t crc = 0xFF;
     for (uint8_t i = 0; i < length; i++) {
@@ -184,7 +217,7 @@ uint8_t IR_Host_CRC8(uint8_t *data, uint8_t length)
     return crc;
 }
 
-void IR_Host_ConfigCanFilter(void)
+void IR_Host_ConfigCanFilter(void)//配置CAN过滤波
 {
     CAN_FilterTypeDef can_filter;
 
@@ -199,35 +232,29 @@ void IR_Host_ConfigCanFilter(void)
     can_filter.FilterActivation = ENABLE;
     can_filter.SlaveStartFilterBank = 14;
 
-    if (HAL_CAN_ConfigFilter(&hcan1, &can_filter) != HAL_OK) {
-        Error_Handler();
-    }
+    HAL_CAN_ConfigFilter(&hcan1, &can_filter);
 }
 
 void IR_Host_StartCan(void)
 {
     IR_Host_ConfigCanFilter();
 
-    if (HAL_CAN_Start(&hcan1) != HAL_OK) {
-        Error_Handler();
-    }
+    HAL_CAN_Start(&hcan1);
 
-    if (HAL_CAN_ActivateNotification(&hcan1, CAN_IT_TX_MAILBOX_EMPTY |
+    HAL_CAN_ActivateNotification(&hcan1, CAN_IT_TX_MAILBOX_EMPTY |
                                               CAN_IT_RX_FIFO0_MSG_PENDING |
                                               CAN_IT_RX_FIFO0_FULL |
-                                              CAN_IT_RX_FIFO0_OVERRUN) != HAL_OK) {
-        Error_Handler();
-    }
+                                              CAN_IT_RX_FIFO0_OVERRUN);
 }
 
-void IR_Host_TxMailboxCompleteCallback(CAN_HandleTypeDef *hcan)
+void IR_Host_TxMailboxCompleteCallback(CAN_HandleTypeDef *hcan)//发送完成回调
 {
     if (hcan->Instance == CAN1) {
 
     }
 }
 
-void IR_Host_Receive_DataFrame_Ocan(uint32_t can_id, uint8_t module_id, uint8_t *data, uint8_t dlc)
+void IR_Host_Receive_DataFrame_Ocan(uint32_t can_id, uint8_t module_id, uint8_t *data, uint8_t dlc)//接收红外主机数据帧
 {
     IR_Host_RxFrame_t rx_frame;
 
@@ -242,7 +269,7 @@ void IR_Host_Receive_DataFrame_Ocan(uint32_t can_id, uint8_t module_id, uint8_t 
     }
 }
 
-void IR_Host_Handle(uint8_t module_id, CAN_HandleTypeDef *hcan, uint32_t id, uint8_t *data, uint8_t dlc)
+void IR_Host_Handle(uint8_t module_id, CAN_HandleTypeDef *hcan, uint32_t id, uint8_t *data, uint8_t dlc)//处理红外主机数据帧
 {
     if (id == IR_HOST_CAN_ID_ACK) {
         if (dlc >= 2 && data[0] == IR_ACK_MAGIC && data[1] == IR_ACK_MAGIC) {
@@ -256,7 +283,7 @@ void IR_Host_Handle(uint8_t module_id, CAN_HandleTypeDef *hcan, uint32_t id, uin
     }
 }
 
-void IR_Host_ProcessRxFrame(CAN_RxHeaderTypeDef *rx_header, uint8_t *rx_data)
+void IR_Host_ProcessRxFrame(CAN_RxHeaderTypeDef *rx_header, uint8_t *rx_data)//处理红外主机数据帧
 {
     uint8_t module_id = rx_data[0];
 
@@ -264,17 +291,17 @@ void IR_Host_ProcessRxFrame(CAN_RxHeaderTypeDef *rx_header, uint8_t *rx_data)
     IR_Host_Handle(module_id, &hcan1, rx_header->StdId, rx_data, rx_header->DLC);
 }
 
-bool IR_Host_SendCommand(uint8_t module_id, IR_Host_Command_t cmd, uint8_t *data, uint8_t length)
+bool IR_Host_SendCommand(uint8_t module_id, IR_Host_Command_t cmd, uint8_t *data, uint8_t length)//发送红外主机命令
 {
     CAN_TxHeaderTypeDef tx_header;
     uint32_t tx_mailbox;
     uint8_t tx_data[8];
-    uint8_t crc_len;
+    uint8_t total_len;
 
     IR_Module_Node_t *module = IR_Host_FindModule(module_id);
     if (module == NULL) return false;
     if (module->busy) return false;
-    if (length > 5) return false;
+    if (length > 6) return false;
 
     uint32_t time_since_last_tx = HAL_GetTick() - module->last_tx_time;
     if (time_since_last_tx < IR_HOST_FRAME_INTERVAL_MS) return false;
@@ -285,14 +312,13 @@ bool IR_Host_SendCommand(uint8_t module_id, IR_Host_Command_t cmd, uint8_t *data
     if (data != NULL && length > 0) {
         memcpy(&tx_data[2], data, length);
     }
-    crc_len = 2 + length;
-    tx_data[crc_len] = IR_Host_CRC8(tx_data, crc_len);
+    total_len = 2 + length;
 
     tx_header.StdId = IR_HOST_CAN_ID_COMMAND;
     tx_header.ExtId = 0;
     tx_header.IDE = CAN_ID_STD;
     tx_header.RTR = CAN_RTR_DATA;
-    tx_header.DLC = crc_len + 1;
+    tx_header.DLC = total_len;
     tx_header.TransmitGlobalTime = DISABLE;
 
     module->busy = true;
@@ -309,7 +335,7 @@ bool IR_Host_SendCommand(uint8_t module_id, IR_Host_Command_t cmd, uint8_t *data
     return true;
 }
 
-bool IR_Host_SendDataWithRetry(uint8_t module_id, uint8_t *data, uint8_t length, uint8_t max_retry)
+bool IR_Host_SendDataWithRetry(uint8_t module_id, uint8_t *data, uint8_t length, uint8_t max_retry)//发送红外主机数据，重试次数
 {
     CAN_TxHeaderTypeDef tx_header;
     uint32_t tx_mailbox;
@@ -318,36 +344,34 @@ bool IR_Host_SendDataWithRetry(uint8_t module_id, uint8_t *data, uint8_t length,
 
     IR_Module_Node_t *module = IR_Host_FindModule(module_id);
     if (module == NULL) return false;
-    if (length > 6) return false;
+    if (length > 7) return false;
 
     for (uint8_t retry = 0; retry < max_retry; retry++) {
         while (module->busy) {
-            vTaskDelay(pdMS_TO_TICKS(10));
+            vTaskDelay(pdMS_TO_TICKS(10));//等待10ms
         }
 
-        module->status = IR_HOST_STATUS_IDLE;
+        module->status = IR_HOST_STATUS_IDLE;//设置状态为空闲
 
-        memset(tx_data, 0, 8);
-        tx_data[0] = module_id;
-        memcpy(&tx_data[1], data, length);
-        total_len = length + 1;
-        tx_data[total_len] = IR_Host_CRC8(tx_data, total_len);
-        total_len++;
+        memset(tx_data, 0, 8);//清空发送数据
+        tx_data[0] = module_id;//设置模块ID
+        memcpy(&tx_data[1], data, length);//复制数据
+        total_len = length + 1;//设置总长度
 
-        tx_header.StdId = IR_HOST_CAN_ID_DATA;
-        tx_header.ExtId = 0;
-        tx_header.IDE = CAN_ID_STD;
-        tx_header.RTR = CAN_RTR_DATA;
-        tx_header.DLC = total_len;
-        tx_header.TransmitGlobalTime = DISABLE;
+        tx_header.StdId = IR_HOST_CAN_ID_DATA;//设置CAN ID
+        tx_header.ExtId = 0;//设置扩展ID
+        tx_header.IDE = CAN_ID_STD;//设置标准ID
+        tx_header.RTR = CAN_RTR_DATA;//设置数据帧
+        tx_header.DLC = total_len;//设置数据长度
+        tx_header.TransmitGlobalTime = DISABLE;//禁用全局时间
 
-        module->busy = true;
-        module->status = IR_HOST_STATUS_SENDING;
+        module->busy = true;//设置为忙状态
+        module->status = IR_HOST_STATUS_SENDING;//设置状态为发送中
 
         if (HAL_CAN_AddTxMessage(&hcan1, &tx_header, tx_data, &tx_mailbox) == HAL_OK) {
-            module->last_tx_time = HAL_GetTick();
+            module->last_tx_time = HAL_GetTick();//设置上次发送时间
 
-            uint32_t start_time = HAL_GetTick();
+            uint32_t start_time = HAL_GetTick();//设置开始时间
             while ((HAL_GetTick() - start_time) < IR_HOST_CAN_TIMEOUT_MS) {
                 if (!module->busy) {
                     if (module->status == IR_HOST_STATUS_SUCCESS) {
@@ -369,7 +393,7 @@ bool IR_Host_SendDataWithRetry(uint8_t module_id, uint8_t *data, uint8_t length,
     return false;
 }
 
-bool IR_Host_Ping(uint8_t module_id, uint32_t timeout_ms)
+bool IR_Host_Ping(uint8_t module_id, uint32_t timeout_ms)//发送红外主机Ping命令
 {
     IR_Module_Node_t *module = IR_Host_FindModule(module_id);
     if (module == NULL) return false;
@@ -403,7 +427,7 @@ bool IR_Host_Ping(uint8_t module_id, uint32_t timeout_ms)
     return false;
 }
 
-bool IR_Host_ReadStatus(uint8_t module_id, uint8_t *status, uint32_t timeout_ms)
+bool IR_Host_ReadStatus(uint8_t module_id, uint8_t *status, uint32_t timeout_ms)//读取红外主机状态
 {
     IR_Module_Node_t *module = IR_Host_FindModule(module_id);
     if (module == NULL) return false;
@@ -417,7 +441,7 @@ bool IR_Host_ReadStatus(uint8_t module_id, uint8_t *status, uint32_t timeout_ms)
         return false;
     }
 
-    uint32_t start_time = HAL_GetTick();
+    uint32_t start_time = HAL_GetTick();//设置开始时间
     while ((HAL_GetTick() - start_time) < timeout_ms) {
         if (!module->busy) {
             if (status != NULL && module->last_response.length > 0) {
@@ -425,15 +449,15 @@ bool IR_Host_ReadStatus(uint8_t module_id, uint8_t *status, uint32_t timeout_ms)
             }
             return true;
         }
-        vTaskDelay(pdMS_TO_TICKS(10));
+        vTaskDelay(pdMS_TO_TICKS(10));//等待10ms
     }
 
-    module->busy = false;
-    module->status = IR_HOST_STATUS_TIMEOUT;
+    module->busy = false;//设置为空闲状态
+    module->status = IR_HOST_STATUS_TIMEOUT;//设置状态为超时    
     return false;
 }
 
-bool IR_Host_ResetModule(uint8_t module_id, uint32_t timeout_ms)
+bool IR_Host_ResetModule(uint8_t module_id, uint32_t timeout_ms)//重置红外主机
 {
     IR_Module_Node_t *module = IR_Host_FindModule(module_id);
     if (module == NULL) return false;
@@ -447,20 +471,20 @@ bool IR_Host_ResetModule(uint8_t module_id, uint32_t timeout_ms)
         return false;
     }
 
-    uint32_t start_time = HAL_GetTick();
+    uint32_t start_time = HAL_GetTick();//设置开始时间
     while ((HAL_GetTick() - start_time) < timeout_ms) {
         if (!module->busy) {
             return true;
         }
-        vTaskDelay(pdMS_TO_TICKS(10));
+        vTaskDelay(pdMS_TO_TICKS(10));//等待10ms
     }
 
-    module->busy = false;
-    module->status = IR_HOST_STATUS_TIMEOUT;
+    module->busy = false;//设置为空闲状态
+    module->status = IR_HOST_STATUS_TIMEOUT;//设置状态为超时    
     return false;
 }
 
-IR_Data_CheckResult_t IR_Host_CheckDataConsistency(uint8_t module_id)
+IR_Data_CheckResult_t IR_Host_CheckDataConsistency(uint8_t module_id)//检查红外主机数据一致性
 {
     IR_Module_Node_t *module = IR_Host_FindModule(module_id);
 
@@ -488,7 +512,7 @@ IR_Data_CheckResult_t IR_Host_CheckDataConsistency(uint8_t module_id)
     return IR_DATA_CHECK_OK;
 }
 
-IR_Data_CheckResult_t IR_Host_CheckAllModules(void)
+IR_Data_CheckResult_t IR_Host_CheckAllModules(void)//检查所有红外主机数据一致性
 {
     IR_Data_CheckResult_t worst_result = IR_DATA_CHECK_OK;
     bool any_module_found = false;
@@ -510,7 +534,7 @@ IR_Data_CheckResult_t IR_Host_CheckAllModules(void)
     return worst_result;
 }
 
-bool IR_Host_GetModuleData(uint8_t module_id, uint8_t *data, uint8_t *length)
+bool IR_Host_GetModuleData(uint8_t module_id, uint8_t *data, uint8_t *length)//获取红外主机数据
 {
     IR_Module_Node_t *module = IR_Host_FindModule(module_id);
 
@@ -519,19 +543,19 @@ bool IR_Host_GetModuleData(uint8_t module_id, uint8_t *data, uint8_t *length)
     }
 
     if (data != NULL) {
-        memcpy(data, module->data_cache.raw_data, 6);
+        memcpy(data, module->data_cache.raw_data, 7);
     }
     if (length != NULL) {
-        *length = module->last_response.length > 6 ? 6 : module->last_response.length;
+        *length = module->last_response.length > 7 ? 7 : module->last_response.length;
     }
 
     return true;
 }
 
-static void IR_Host_DiscoveryPhase(void)
+static void IR_Host_DiscoveryPhase(void)//红外主机发现阶段
 {
     static uint8_t discover_index = 0;
-    uint32_t now = HAL_GetTick();
+    uint32_t now = HAL_GetTick();//设置当前时间
 
     if (now - ir_host_context.discovery_start_time > 5000) {
         ir_host_context.task_state = IR_HOST_TASK_STATE_RUNNING;
@@ -543,8 +567,8 @@ static void IR_Host_DiscoveryPhase(void)
     if (module != NULL && !module->discovered) {
         if (!module->busy && (now - module->last_tx_time) > IR_HOST_POLL_INTERVAL_MS) {
             if (IR_Host_Ping(module->module_id, 200)) {
-                module->discovered = true;
-                module->online = true;
+                module->discovered = true;//设置发现状态为已发现
+                module->online = true;//设置在线状态为在线
             } else {
                 module->poll_fail_count++;
             }
@@ -559,26 +583,25 @@ static void IR_Host_DiscoveryPhase(void)
     vTaskDelay(pdMS_TO_TICKS(50));
 }
 
-static void IR_Host_PollModule(IR_Module_Node_t *module)
+static void IR_Host_PollModule(IR_Module_Node_t *module)//轮询红外主机
 {
     if (module == NULL) return;
 
     if (!module->busy) {
-        uint32_t now = HAL_GetTick();
+        uint32_t now = HAL_GetTick();//设置当前时间
 
         if (!module->online || !module->discovered) {
             if (now - module->last_tx_time > IR_HOST_POLL_INTERVAL_MS * 2) {
                 if (IR_Host_Ping(module->module_id, 300)) {
-                    module->discovered = true;
-                    module->online = true;
-                    module->consecutive_errors = 0;
-                } else {
+                    module->discovered = true;//设置发现状态为已发现
+                    module->online = true;//设置在线状态为在线
+                    } else {
                     module->poll_fail_count++;
                     module->consecutive_errors++;
                     if (module->consecutive_errors > 10) {
-                        module->online = false;
-                        module->discovered = false;
-                        module->data_cache.valid = false;
+                        module->online = false;//模块离线
+                        module->discovered = false;//模块未发现
+                        module->data_cache.valid = false;//数据缓存无效
                     }
                 }
             }
@@ -600,16 +623,16 @@ static void IR_Host_PollModule(IR_Module_Node_t *module)
     }
 }
 
-static void IR_Host_UpdateOnlineStatus(void)
+static void IR_Host_UpdateOnlineStatus(void)//更新红外主机在线状态
 {
-    uint32_t now = HAL_GetTick();
-    IR_Module_Node_t *current = ir_host_context.module_list.head;
+    uint32_t now = HAL_GetTick();//当前时间
+    IR_Module_Node_t *current = ir_host_context.module_list.head;//当前模块节点
 
     while (current != NULL) {
         if (current->online &&
             (now - current->last_rx_time) > IR_HOST_ONLINE_TIMEOUT_MS) {
-            current->online = false;
-            current->data_cache.valid = false;
+            current->online = false;//模块离线
+            current->data_cache.valid = false;//数据缓存无效
         }
 
         if (current->data_cache.valid &&
@@ -617,66 +640,65 @@ static void IR_Host_UpdateOnlineStatus(void)
             current->data_cache.valid = false;
         }
 
-        current = current->next;
+        current = current->next;//下一个模块节点
     }
 }
 
-void IR_Host_Task(void *argument)
+void IR_Host_Task(void *argument)//红外主机任务
 {
     IR_Host_RxFrame_t rx_frame;
     (void)argument;
 
+    // 初始化红外主机任务状态
     ir_host_context.task_state = IR_HOST_TASK_STATE_DISCOVERY;
-    ir_host_context.discovery_start_time = HAL_GetTick();
+    ir_host_context.discovery_start_time = HAL_GetTick();//设置当前时间
     ir_host_context.current_poll_index = 0;
     ir_host_context.last_poll_time = 0;
 
+    
     for (;;) {
         while (xQueueReceive(ir_host_context.rx_queue, &rx_frame, pdMS_TO_TICKS(10)) == pdTRUE) {
             if (rx_frame.can_id == IR_HOST_CAN_ID_DATA) {
-                IR_Module_Node_t *module = IR_Host_FindModule(rx_frame.module_id);
+                IR_Module_Node_t *module = IR_Host_FindModule(rx_frame.module_id);//查找模块
+
 
                 if (module != NULL && rx_frame.dlc >= 2) {
-                    uint8_t received_crc = rx_frame.data[rx_frame.dlc - 1];
-                    uint8_t calculated_crc = IR_Host_CRC8(rx_frame.data, rx_frame.dlc - 1);
+                    uint8_t data_len = rx_frame.dlc - 1;//数据长度（去掉module_id）
 
-                    module->data_cache.total_rx_count++;
+                    module->data_cache.total_rx_count++;//增加总接收数据包数
 
-                    if (received_crc == calculated_crc) {
-                        uint8_t data_len = rx_frame.dlc - 2;
-                        bool data_changed = false;
+                    if (data_len > 0) {
+                        bool data_changed = false;//数据是否改变
+
+                        module->data_cache.total_rx_count++;//增加总接收数据包数
 
                         if (module->data_cache.valid &&
-                            data_len > 0 &&
-                            data_len <= 6 &&
+                            data_len <= 7 &&
                             memcmp(module->data_cache.raw_data,
                                    &rx_frame.data[1],
                                    data_len) != 0) {
-                            data_changed = true;
+                            data_changed = true;//数据改变
                         }
 
-                        if (data_len > 0) {
-                            memcpy(module->data_cache.raw_data,
-                                   &rx_frame.data[1],
-                                   data_len > 6 ? 6 : data_len);
-                        }
-                        module->data_cache.update_timestamp = rx_frame.timestamp;
-                        module->data_cache.valid = true;
-                        module->data_cache.crc_error_count = 0;
+                        memcpy(module->data_cache.raw_data,
+                               &rx_frame.data[1],
+                               data_len > 7 ? 7 : data_len);//复制数据
+                        module->data_cache.update_timestamp = rx_frame.timestamp;//更新时间戳
+                        module->data_cache.valid = true;//数据缓存有效
 
                         if (!data_changed) {
                             if (module->data_cache.consistent_count < 255) {
-                                module->data_cache.consistent_count++;
+                                module->data_cache.consistent_count++;//增加一致计数
                             }
                         } else {
                             module->data_cache.consistent_count = 1;
                         }
 
-                        module->last_response.module_id = rx_frame.data[0];
-                        module->last_response.status = IR_HOST_STATUS_SUCCESS;
-                        module->last_response.length = data_len;
-                        module->last_response.timestamp = rx_frame.timestamp;
-                        module->last_response.valid = true;
+                        module->last_response.module_id = rx_frame.data[0];//设置模块ID
+                        module->last_response.status = IR_HOST_STATUS_SUCCESS;//设置状态为成功
+                        module->last_response.length = data_len;//设置长度为数据长度
+                        module->last_response.timestamp = rx_frame.timestamp;//设置时间戳
+                        module->last_response.valid = true;//设置有效为有效
 
                         if (data_len > 0) {
                             memcpy(module->last_response.data,
@@ -684,17 +706,11 @@ void IR_Host_Task(void *argument)
                                    data_len);
                         }
 
-                        module->last_rx_time = rx_frame.timestamp;
-                        module->online = true;
-                        module->busy = false;
-                        module->discovered = true;
-                        module->poll_fail_count = 0;
-                    } else {
-                        module->data_cache.total_crc_error_count++;
-                        module->data_cache.crc_error_count++;
-                        if (module->data_cache.crc_error_count >= IR_HOST_MAX_CRC_ERRORS) {
-                            module->data_cache.valid = false;
-                        }
+                        module->last_rx_time = rx_frame.timestamp;//设置最后接收时间
+                        module->online = true;//模块在线
+                        module->busy = false;//模块不忙
+                        module->discovered = true;//模块已发现
+                        module->poll_fail_count = 0;//轮询失败次数重置
                     }
                 }
             }
@@ -707,23 +723,23 @@ void IR_Host_Task(void *argument)
 
             case IR_HOST_TASK_STATE_RUNNING:
             {
-                uint32_t now = HAL_GetTick();
+                uint32_t now = HAL_GetTick();//当前时间
 
                 if (now - ir_host_context.last_poll_time >= IR_HOST_POLL_INTERVAL_MS) {
-                    ir_host_context.last_poll_time = now;
+                    ir_host_context.last_poll_time = now;//最后轮询时间
 
                     IR_Module_Node_t *module = IR_Host_GetModuleByIndex(
-                        ir_host_context.current_poll_index);
+                        ir_host_context.current_poll_index);//当前轮询模块
 
                     if (module != NULL) {
-                        IR_Host_PollModule(module);
+                        IR_Host_PollModule(module);//轮询模块
                     }
 
                     ir_host_context.current_poll_index++;
                     if (ir_host_context.current_poll_index >=
                         ir_host_context.module_list.count) {
-                        ir_host_context.current_poll_index = 0;
-                        IR_Host_UpdateOnlineStatus();
+                        ir_host_context.current_poll_index = 0;//当前轮询模块索引重置
+                        IR_Host_UpdateOnlineStatus();//更新在线状态
                     }
                 } else {
                     vTaskDelay(pdMS_TO_TICKS(10));
@@ -736,11 +752,96 @@ void IR_Host_Task(void *argument)
                 break;
 
             default:
-                ir_host_context.task_state = IR_HOST_TASK_STATE_DISCOVERY;
-                ir_host_context.discovery_start_time = HAL_GetTick();
+                ir_host_context.task_state = IR_HOST_TASK_STATE_DISCOVERY;//任务状态重置
+                ir_host_context.discovery_start_time = HAL_GetTick();//发现开始时间
                 break;
         }
 
         vTaskDelay(pdMS_TO_TICKS(10));
+    }
+}
+
+static TaskHandle_t ir_test_task_handle = NULL;
+
+void IR_Test_Task(void *argument)
+{
+    (void)argument;
+    uint32_t last_send_time = 0;
+    CAN_TxHeaderTypeDef tx_header;
+    uint32_t tx_mailbox;
+
+    IR_Host_StartCan();
+    vTaskDelay(100);
+
+    IR_Host_Init();
+    IR_Host_AddModule(0x01);
+    vTaskDelay(100);
+
+    IR_Host_StartTask();
+
+    tx_header.StdId = IR_HOST_CAN_ID_DATA;
+    tx_header.ExtId = 0;
+    tx_header.IDE = CAN_ID_STD;
+    tx_header.RTR = CAN_RTR_DATA;
+    tx_header.TransmitGlobalTime = DISABLE;
+
+    for (;;) {
+        ir_debug.test_cycle++;
+
+        ir_debug.task_state = (uint8_t)IR_Host_GetTaskState();
+        ir_debug.online_count = IR_Host_GetOnlineCount();
+        ir_debug.total_modules = IR_Host_GetModuleCount();
+
+        IR_Module_Node_t *mod1 = IR_Host_FindModule(0x01);
+        if (mod1 != NULL) {
+            ir_debug.mod1.discovered = mod1->discovered ? 1 : 0;
+            ir_debug.mod1.online = mod1->online ? 1 : 0;
+            ir_debug.mod1.busy = mod1->busy ? 1 : 0;
+            ir_debug.mod1.consecutive_errors = mod1->consecutive_errors;
+            ir_debug.mod1.total_rx_count = mod1->data_cache.total_rx_count;
+            ir_debug.mod1.last_rx_time = mod1->last_rx_time;
+        }
+
+        if (ir_debug.task_state == IR_HOST_TASK_STATE_RUNNING && ir_debug.online_count >= 1) {
+            uint32_t now = HAL_GetTick();
+            if (now - last_send_time >= 5000) {
+                last_send_time = now;
+
+                ir_debug.tx_data[0] = (uint8_t)(ir_debug.test_cycle & 0xFF);
+                ir_debug.tx_data[1] = (uint8_t)((ir_debug.test_cycle >> 8) & 0xFF);
+                ir_debug.tx_data[2] = 0xCC;
+                ir_debug.tx_data[3] = 0xDD;
+                ir_debug.tx_data[4] = 0xEE;
+                ir_debug.tx_data[5] = 0xFF;
+                ir_debug.tx_data[6] = 0x11;
+
+                uint8_t can_tx_data[8];
+                can_tx_data[0] = 0x01;
+                memcpy(&can_tx_data[1], ir_debug.tx_data, 7);
+                tx_header.DLC = 8;
+
+                if (HAL_CAN_AddTxMessage(&hcan1, &tx_header, can_tx_data, &tx_mailbox) == HAL_OK) {
+                    ir_debug.stats.tx_success_count++;
+                    ir_debug.data_changed_flag = 1;
+                    ir_debug.update_timestamp = HAL_GetTick();
+                } else {
+                    ir_debug.stats.tx_fail_count++;
+                    ir_debug.data_changed_flag = 0;
+                }
+            }
+        }
+
+        if (ir_debug.test_cycle % 100 == 0 && ir_debug.task_state == IR_HOST_TASK_STATE_DISCOVERY) {
+            IR_Host_ForceRediscover();
+        }
+
+        vTaskDelay(pdMS_TO_TICKS(50));
+    }
+}
+
+void IR_Test_StartTask(void)
+{
+    if (ir_test_task_handle == NULL) {
+        xTaskCreate(IR_Test_Task, "IR_Test_Task", 512, NULL, 4, &ir_test_task_handle);
     }
 }
