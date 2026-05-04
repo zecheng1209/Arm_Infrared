@@ -100,7 +100,9 @@ void MX_FREERTOS_Init(void) {
 
   /* USER CODE BEGIN RTOS_QUEUES */
   /* add queues, ... */
-	cdc_recv_semphr =xSemaphoreCreateBinary();
+	
+//	cdc_recv_semphr =xSemaphoreCreateBinary();
+	
   /* USER CODE END RTOS_QUEUES */
 
   /* Create the thread(s) */

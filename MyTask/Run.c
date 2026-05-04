@@ -113,7 +113,7 @@ void CDC_Recv_Cb(uint8_t *src, uint16_t size)
 	}
 }
 
-void MotorSendTask(void *param)// ����������ݷ��͵�PC��
+void MotorSendTask(void *param)// 向PC发送数据
 {
 	TickType_t Last_wake_time = xTaskGetTickCount();
 	USB_CDC_Init(CDC_Recv_Cb, NULL, NULL);
@@ -138,11 +138,11 @@ void MotorSendTask(void *param)// ����������ݷ��͵�PC�
 
 uint8_t count = 0; 
 TaskHandle_t MotorRecTask_Handle;
-void MotorRecTask(void *param)// ��PC���յ��������ֵ
+void MotorRecTask(void *param)// 从PC接收数据
 {
-	TickType_t last_wake_time = xTaskGetTickCount();
+	TickType_t Last_wake_time = xTaskGetTickCount();
 
-	cdc_recv_semphr = xSemaphoreCreateBinary();
+	cdc_recv_semphr = xSemaphoreCreateBinary();  // 已在freertos.c中创建，此处保留备用
   xSemaphoreTake(cdc_recv_semphr, 0);
 
 	for (;;)
